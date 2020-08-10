@@ -8,6 +8,7 @@ verify_ssl = true
 [packages]
 python-telegram-bot = "*"
 redis = "*"
+tweepy = "*"
 
 [requires]
 python_version = "3.8"
