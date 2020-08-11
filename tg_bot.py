@@ -138,7 +138,7 @@ def handle_messages(update: Update, context: CallbackContext):
     if not redis.get(f'chat:{chat_id}:oauth:access_token'):
         context.bot.send_message(chat_id=chat_id, text='You need to set me up first. Click on /start')
         return
-    text = update.message.text or ''
+    text = update.message.text or update.message.caption or ''
     if len(text) > TWEET_CHARACTER_LIMIT:
         context.bot.send_message(chat_id=chat_id,
                                  text=f'Sorry, your text exceeds the limit of {TWEET_CHARACTER_LIMIT} characters.')
