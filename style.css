@@ -1,0 +1,48 @@
+body {
+    background-color: #efefef;
+}
+
+@media (prefers-color-scheme: dark) {
+    /*
+    :root {
+        --image-filter: grayscale(100%);
+    }
+
+    img:not([src*=".svg"]) {
+        filter: var(--image-filter);
+    }*/
+    body, .card-title a, .card-title a:hover {
+        color: #cecece;
+        background-color: #303132;
+    }
+
+    p a {
+        color: #ceceee;
+        border-color: #ceceee;
+    }
+
+    p a:hover {
+        color: #8890EE;
+        border-color: #8890EE;
+    }
+
+    article a::before {
+        color: #cecece;
+    }
+
+    .card {
+        background-color: #202020;
+    }
+
+    .form-control[readonly] {
+        color: #dfdfe8;
+        background-color: #303132;
+        border-color: #6a6b6d;
+    }
+
+    .input-group-text {
+        color: #dfdfe8;
+        background-color: #303132;
+        border-color: #6a6b6d;
+    }
+}

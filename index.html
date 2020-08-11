@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" style="height: 100%;">
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+          integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+
+    <link rel="stylesheet" href="style.css">
+
+    <title>myDailyBot Authorization</title>
+</head>
+<body style="height: 100%">
+<div class="container" style="height: 100%">
+    <div class="d-flex align-items-center flex-column justify-content-center" style="height: 100%">
+        <div class="card">
+            <div class="card-body">
+                <h1 class="card-title">Almost done</h1>
+                <p class="card-text">Please send this message in your group chat to finalize authorization:</p>
+                <div class="input-group mb-1">
+                    <input type="text" class="form-control" id="telegramMessage" readonly
+                           value="/authorize OAUTH_TOKEN OAUTH_VERIFIER">
+                    <div class="input-group-append">
+                        <button title="Copy to clipboard" data-toggle="tooltip" data-placement="top"
+                                class="input-group-text btn-primary btn" id="copyToClipboardButton">Copy
+                        </button>
+                    </div>
+                </div>
+                <noscript>
+                    <p class="card-text">
+                        <small>You have disabled JavaScript. Please replace <code>OAUTH_TOKEN</code> and <code>OAUTH_VERIFIER</code>
+                            by the corresponding values from the URL!</small>
+                    </p>
+                </noscript>
+                <p class="card-text text-muted">
+                    <small>Never give this token to anyone else! It can be used to post or delete anything from your twitter account.</small>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Optional JavaScript -->
+<!-- jQuery first, then Popper.js, then Bootstrap JS -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
+        integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"
+        integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN"
+        crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"
+        integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV"
+        crossorigin="anonymous"></script>
+</body>
+<script type="text/javascript" src="script.js"></script>
+</html>
