@@ -9,6 +9,7 @@ verify_ssl = true
 python-telegram-bot = "*"
 redis = "*"
 tweepy = "*"
+pytz = "*"
 
 [requires]
 python_version = "3.8"

@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  telegram_bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - redis
+  redis:
+    image: "redis:alpine"
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    hostname: redis
+    volumes:
+      - redis-data:/data
+volumes:
+  redis-data:
