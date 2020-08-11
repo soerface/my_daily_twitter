@@ -2,6 +2,11 @@
 let url = new URL(window.location.href);
 let oauth_token = url.searchParams.get('oauth_token')
 let oauth_verifier = url.searchParams.get('oauth_verifier')
+
+if (!(oauth_token && oauth_verifier)) {
+    window.location.replace('https://t.me/my_daily_twitter_bot')
+}
+
 let tgMessageBox = document.getElementById('telegramMessage');
 let boxText = tgMessageBox.getAttribute('value')
 boxText = boxText.replace('OAUTH_TOKEN', oauth_token).replace('OAUTH_VERIFIER', oauth_verifier)
