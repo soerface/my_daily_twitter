@@ -8,6 +8,7 @@ WORKDIR /app
 COPY Pipfile* ./
 RUN pipenv sync
 
-COPY app.py ./
+COPY tg_bot.py ./
+COPY tweet.py ./
 ENTRYPOINT ["pipenv", "run"]
-CMD python app.py
+CMD python tg_bot.py

@@ -1,33 +1,21 @@
 #!/usr/bin/env python3
 import os
 import sys
+from datetime import datetime
 
 import tweepy
-from redis import Redis
 
 import logging
 
 from telegram import BotCommand, Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Updater, CommandHandler, Filters, CallbackContext
+from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler
 import pytz
 from pytz import timezone
 
+from common import TWEET_CHARACTER_LIMIT, redis, get_twitter_auth, get_twitter_api, MAX_QUEUE_SIZE
+
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.getLevelName(os.environ.get('LOG_LEVEL', 'INFO')))
-
-redis = Redis(host=os.environ.get('REDIS_HOST', 'redis'), port=os.environ.get('REDIS_PORT', 6379))
-
-
-def get_twitter_auth():
-    return tweepy.OAuthHandler(os.environ['TWITTER_CLIENT_ID'], os.environ['TWITTER_CLIENT_SECRET'])
-
-
-def get_twitter_api(chat_id) -> tweepy.API:
-    auth = get_twitter_auth()
-    access_token = redis.get(f'chat:{chat_id}:oauth:access_token')
-    secret = redis.get(f'chat:{chat_id}:oauth:access_token_secret')
-    auth.set_access_token(access_token, secret)
-    return tweepy.API(auth)
 
 
 def handle_timezone_command(update: Update, context: CallbackContext):
@@ -91,14 +79,12 @@ def handle_test_tweet_command(update: Update, context: CallbackContext):
     twitter = get_twitter_api(chat_id=update.message.chat_id)
     try:
         status = twitter.update_status(
-            'https://t.me/my_daily_twitter_bot was successfully configured for this account!')
+            f'https://t.me/{context.bot.username} was successfully configured for this account!')
     except tweepy.error.TweepError as e:
         context.bot.send_message(chat_id=update.message.chat_id, text=e.reason)
         context.bot.send_message(chat_id=update.message.chat_id,
                                  text='Sorry, I was unable to tweet something. Try /start')
         return
-    print(status)
-    print(dir(status))
     tweet_url = f'https://twitter.com/{status.author.name}/status/{status.id}'
     context.bot.send_message(chat_id=update.message.chat_id, text=f'Here is your tweet: {tweet_url}')
 
@@ -132,6 +118,68 @@ def handle_authorize_command(update: Update, context: CallbackContext):
                                   "everything works by posting a tweet: /test_tweet")
 
 
+def find_largest_photo(photos):
+    largest_index = 0
+    max_size = 0
+    for i, photo in enumerate(photos):
+        size = photo.height * photo.width
+        if size > max_size:
+            max_size = size
+            largest_index = i
+    return photos[largest_index]
+
+
+def handle_messages(update: Update, context: CallbackContext):
+    chat_id = update.message.chat_id
+    print(update)
+    text = update.message.text or ''
+    if len(text) > TWEET_CHARACTER_LIMIT:
+        context.bot.send_message(chat_id=chat_id,
+                                 text=f'Sorry, your text exceeds the limit of {TWEET_CHARACTER_LIMIT} characters.')
+    queue_size = redis.get(f'chat:{chat_id}:queue_size')
+    if queue_size is None:
+        queue_size = 0
+    queue_size = int(queue_size)
+    if queue_size >= MAX_QUEUE_SIZE:
+        context.bot.send_message(chat_id=chat_id, text='You have exceeded the maximum queue size.')
+    redis.set(f'chat:{chat_id}:queue:{queue_size}:text', text)
+    if update.message.document:
+        redis.set(f'chat:{chat_id}:queue:{queue_size}:tg_attachment_id', update.message.document.file_id)
+    elif update.message.photo:
+        redis.set(f'chat:{chat_id}:queue:{queue_size}:tg_attachment_id',
+                  find_largest_photo(update.message.photo).file_id)
+    queue_size += 1
+    redis.set(f'chat:{chat_id}:queue_size', queue_size)
+    context.bot.send_message(chat_id=chat_id,
+                             text=f'Ok, I will tweet that! You now have {queue_size} tweet(s) in your queue.')
+
+
+def handle_post_time_command(update: Update, context: CallbackContext):
+    chat_id = update.message.chat_id
+
+    if len(context.args) == 0:
+        hours = range(24)
+        minutes = range(60)
+        buttons = []
+        for hour in range(24):
+            for minute in range(0, 60, 15):
+                buttons.append([KeyboardButton(f'/post_time {hour:02}:{minute:02}')])
+        reply = ReplyKeyboardMarkup(buttons, one_time_keyboard=True)
+        context.bot.send_message(chat_id=update.message.chat_id,
+                                 text='At which time should I tweet?',
+                                 reply_markup=reply)
+        return
+
+    try:
+        tweet_time = datetime.strptime(context.args[0], '%H:%M').strftime("%H:%M")
+    except ValueError:
+        context.bot.send_message(chat_id=chat_id, text="Sorry, I didn't get that time. Time must be in format %H:%M")
+        return
+    redis.set(f'chat:{chat_id}:post_time', tweet_time)
+    context.bot.send_message(chat_id=chat_id,
+                             text=f'I will tweet at {tweet_time}')
+
+
 def main():
     if 'TELEGRAM_TOKEN' not in os.environ:
         logging.error('You need to set the environment variable "TELEGRAM_TOKEN"')
@@ -146,15 +194,19 @@ def main():
     updater = Updater(token=os.environ.get('TELEGRAM_TOKEN'), use_context=True)
     updater.bot.set_my_commands([
         BotCommand('start', 'Starts the authorization process'),
+        # BotCommand('help', 'Display help'),
         BotCommand('timezone', 'Changes the timezone of a chat'),
+        BotCommand('post_time', 'When do you want me to tweet?'),
         BotCommand('test_tweet', 'Instantly sends a tweet to test authorization'),
         # BotCommand('clock', 'Outputs the date of the received message'),
     ])
     updater.dispatcher.add_handler(CommandHandler('start', handle_start_command))
     updater.dispatcher.add_handler(CommandHandler('timezone', handle_timezone_command))
     updater.dispatcher.add_handler(CommandHandler('clock', handle_clock_command))
+    updater.dispatcher.add_handler(CommandHandler('post_time', handle_post_time_command))
     updater.dispatcher.add_handler(CommandHandler('test_tweet', handle_test_tweet_command))
     updater.dispatcher.add_handler(CommandHandler('authorize', handle_authorize_command))
+    updater.dispatcher.add_handler(MessageHandler(None, handle_messages))
 
     updater.start_polling()
 
