@@ -113,6 +113,10 @@ def handle_authorize_command(update: Update, context: CallbackContext):
         return
     redis.set(f'chat:{chat_id}:oauth:access_token', access_token)
     redis.set(f'chat:{chat_id}:oauth:access_token_secret', access_token_secret)
+    if not redis.get(f'chat:{chat_id}:settings:timezone'):
+        redis.set(f'chat:{chat_id}:settings:timezone', 'UTC')
+    if not redis.get(f'chat:{chat_id}:settings:post_time'):
+        redis.set(f'chat:{chat_id}:settings:post_time', '12:00')
     context.bot.send_message(chat_id=chat_id,
                              text="You're all set! If you want to, you can test if "
                                   "everything works by posting a tweet: /test_tweet")
@@ -131,7 +135,9 @@ def find_largest_photo(photos):
 
 def handle_messages(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
-    print(update)
+    if not redis.get(f'chat:{chat_id}:oauth:access_token'):
+        context.bot.send_message(chat_id=chat_id, text='You need to set me up first. Click on /start')
+        return
     text = update.message.text or ''
     if len(text) > TWEET_CHARACTER_LIMIT:
         context.bot.send_message(chat_id=chat_id,
@@ -158,8 +164,6 @@ def handle_post_time_command(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
 
     if len(context.args) == 0:
-        hours = range(24)
-        minutes = range(60)
         buttons = []
         for hour in range(24):
             for minute in range(0, 60, 15):
@@ -175,7 +179,7 @@ def handle_post_time_command(update: Update, context: CallbackContext):
     except ValueError:
         context.bot.send_message(chat_id=chat_id, text="Sorry, I didn't get that time. Time must be in format %H:%M")
         return
-    redis.set(f'chat:{chat_id}:post_time', tweet_time)
+    redis.set(f'chat:{chat_id}:settings:post_time', tweet_time)
     context.bot.send_message(chat_id=chat_id,
                              text=f'I will tweet at {tweet_time}')
 
