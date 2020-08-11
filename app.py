@@ -93,7 +93,7 @@ def handle_test_tweet_command(update: Update, context: CallbackContext):
         status = twitter.update_status(
             'https://t.me/my_daily_twitter_bot was successfully configured for this account!')
     except tweepy.error.TweepError as e:
-        context.bot.send_message(chat_id=update.message.chat_id, text=str(e))
+        context.bot.send_message(chat_id=update.message.chat_id, text=e.reason)
         context.bot.send_message(chat_id=update.message.chat_id,
                                  text='Sorry, I was unable to tweet something. Try /start')
         return
