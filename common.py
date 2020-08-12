@@ -1,4 +1,6 @@
+import logging
 import os
+import sys
 from pathlib import Path
 
 import tweepy
@@ -9,8 +11,23 @@ TWEET_CHARACTER_LIMIT = 280
 MAX_QUEUE_SIZE = 365
 FILE_STORAGE_PATH = Path('/tmp/my_daily_twitter/')
 
-redis = Redis(host=os.environ.get('REDIS_HOST', 'redis'), port=os.environ.get('REDIS_PORT', 6379))
-telegram_updater = Updater(token=os.environ.get('TELEGRAM_TOKEN'), use_context=True)
+redis = Redis(
+    host=os.environ.get('REDIS_HOST', 'redis'),
+    port=os.environ.get('REDIS_PORT', 6379),
+    charset='utf-8',
+    decode_responses=True
+)
+
+
+def get_telegram_updater():
+    return Updater(token=os.environ.get('TELEGRAM_TOKEN'), use_context=True)
+
+
+def check_env_variables():
+    for var in ['TELEGRAM_TOKEN', 'TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET']:
+        if var not in os.environ or not os.environ[var]:
+            logging.error(f'You need to set the environment variable "{var}"')
+            return sys.exit(1)
 
 
 def get_twitter_auth():

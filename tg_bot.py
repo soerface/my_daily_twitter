@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import sys
 from datetime import datetime
 
 import tweepy
@@ -12,8 +11,8 @@ from telegram.ext import CommandHandler, CallbackContext, MessageHandler, Filter
 import pytz
 from pytz import timezone
 
-from common import TWEET_CHARACTER_LIMIT, redis, get_twitter_auth, get_twitter_api, MAX_QUEUE_SIZE, telegram_updater, \
-    build_tweet_url
+from common import TWEET_CHARACTER_LIMIT, redis, get_twitter_auth, get_twitter_api, MAX_QUEUE_SIZE, \
+    get_telegram_updater, build_tweet_url, check_env_variables
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.getLevelName(os.environ.get('LOG_LEVEL', 'INFO')))
@@ -167,12 +166,9 @@ def handle_tweet_time_command(update: Update, context: CallbackContext):
     if len(context.args) == 0:
         buttons = []
         for hour in range(24):
-            for minute in range(0, 60, 15):
-                buttons.append([KeyboardButton(f'/tweet_time {hour:02}:{minute:02}')])
+            buttons.append([KeyboardButton(f'/tweet_time {hour:02}:{minute:02}') for minute in range(0, 60, 15)])
         reply = ReplyKeyboardMarkup(buttons, one_time_keyboard=True)
         tweet_time = redis.get(f'chat:{chat_id}:settings:tweet_time')
-        if tweet_time:
-            tweet_time = tweet_time.decode()
         context.bot.send_message(chat_id=update.message.chat_id,
                                  text=f'Your current tweet time is {tweet_time}. Do you want to change it?',
                                  reply_markup=reply)
@@ -181,7 +177,8 @@ def handle_tweet_time_command(update: Update, context: CallbackContext):
     try:
         tweet_time = datetime.strptime(context.args[0], '%H:%M').strftime("%H:%M")
     except ValueError:
-        context.bot.send_message(chat_id=chat_id, text="Sorry, I didn't get that time. Time must be in format %H:%M")
+        context.bot.send_message(chat_id=chat_id, text="Sorry, I didn't understand that time. "
+                                                       "Time must be in format %H:%M")
         return
     redis.set(f'chat:{chat_id}:settings:tweet_time', tweet_time)
     context.bot.send_message(chat_id=chat_id,
@@ -227,15 +224,9 @@ def handle_help_command(update: Update, context: CallbackContext):
 
 
 def main():
-    if 'TELEGRAM_TOKEN' not in os.environ:
-        logging.error('You need to set the environment variable "TELEGRAM_TOKEN"')
-        return sys.exit(1)
-    if 'TWITTER_CLIENT_ID' not in os.environ:
-        logging.error('You need to set the environment variable "TWITTER_CLIENT_ID"')
-        return sys.exit(1)
-    if 'TWITTER_CLIENT_SECRET' not in os.environ:
-        logging.error('You need to set the environment variable "TWITTER_CLIENT_SECRET"')
-        return sys.exit(1)
+    check_env_variables()
+
+    telegram_updater = get_telegram_updater()
 
     telegram_updater.bot.set_my_commands([
         BotCommand('start', 'Starts the authorization process'),

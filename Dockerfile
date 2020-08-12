@@ -10,5 +10,6 @@ RUN pipenv sync
 
 COPY tg_bot.py ./
 COPY tweet.py ./
+COPY common.py ./
 ENTRYPOINT ["pipenv", "run"]
 CMD python tg_bot.py
