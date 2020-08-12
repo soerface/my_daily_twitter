@@ -7,6 +7,7 @@ from time import sleep
 from datetime import datetime
 
 import tweepy
+from pytz import timezone
 
 from common import redis, get_twitter_api, get_telegram_updater, FILE_STORAGE_PATH, build_tweet_url, check_env_variables
 
@@ -27,7 +28,8 @@ def loop():
         desired_time = redis.get(key).split(':')
         desired_hour = int(desired_time[0])
         desired_minute = int(desired_time[1])
-        if desired_hour != now.hour or desired_minute != now.minute:
+        local_now = now.astimezone(timezone(redis.get(f'chat:{chat_id}:settings:timezone') or 'UTC'))
+        if desired_hour != local_now.hour or desired_minute != local_now.minute:
             continue
         queue_size = redis.get(f'chat:{chat_id}:queue_size') or 0
         queue_size = int(queue_size)
