@@ -245,7 +245,9 @@ def main():
     telegram_updater.dispatcher.add_handler(CommandHandler('tweet_time', handle_tweet_time_command))
     telegram_updater.dispatcher.add_handler(CommandHandler('test_tweet', handle_test_tweet_command))
     telegram_updater.dispatcher.add_handler(CommandHandler('authorize', handle_authorize_command))
-    telegram_updater.dispatcher.add_handler(MessageHandler(~Filters.command, handle_messages))
+    telegram_updater.dispatcher.add_handler(
+        MessageHandler((Filters.private | Filters.group) & (Filters.text | Filters.photo | Filters.document),
+                       handle_messages))
 
     logging.info('Ready, now polling telegram')
     telegram_updater.start_polling()
