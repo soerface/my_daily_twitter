@@ -43,4 +43,6 @@ def get_twitter_api(chat_id) -> tweepy.API:
 
 
 def build_tweet_url(status) -> str:
+    if status is None:
+        return '<no tweet was posted>'
     return f'https://twitter.com/{status.author.screen_name}/status/{status.id}'

@@ -36,8 +36,8 @@ def loop():
         if queue_size <= 0:
             continue
         queue_size -= 1
-        tweet_text = redis.get(f'chat:{chat_id}:queue:{queue_size}:text')
-        tg_attachment_id = redis.get(f'chat:{chat_id}:queue:{queue_size}:tg_attachment_id')
+        tweet_text = redis.get(f'chat:{chat_id}:queue:0:text')
+        tg_attachment_id = redis.get(f'chat:{chat_id}:queue:0:tg_attachment_id')
 
         twitter = get_twitter_api(chat_id)
 
@@ -77,6 +77,15 @@ def loop():
             finally:
                 filename.unlink(missing_ok=True)
         logging.debug('Deleting stored tweet and attachment id')
+        # Move all elements in the queue one
+        for i in range(queue_size):
+            k0 = f'chat:{chat_id}:queue:{i}:text'
+            k1 = f'chat:{chat_id}:queue:{i+1}:text'
+            l0 = f'chat:{chat_id}:queue:{i}:tg_attachment_id'
+            l1 = f'chat:{chat_id}:queue:{i + 1}:tg_attachment_id'
+            redis.set(k0, redis.get(k1) or '')
+            redis.set(l0, redis.get(l1) or '')
+        # The last element is now duplicated; delete it
         redis.delete(f'chat:{chat_id}:queue:{queue_size}:text')
         redis.delete(f'chat:{chat_id}:queue:{queue_size}:tg_attachment_id')
 
