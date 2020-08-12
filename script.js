@@ -17,6 +17,23 @@ $('#copyToClipboardButton').tooltip()
 document.getElementById('copyToClipboardButton').onclick = event => {
     let text = tgMessageBox.getAttribute('value')
 
+    if (!navigator.clipboard) {
+        try {
+            tgMessageBox.focus();
+            tgMessageBox.select();
+            let successful = document.execCommand('copy');
+            if (successful) {
+                $(event.target).attr('title', 'Copied!').tooltip('show');
+                $(event.target).attr('data-original-title', 'Copied!').tooltip('show');
+                $(event.target).attr('title', 'Copy to clipboard');
+                $(event.target).attr('data-original-title', 'Copy to clipboard');
+            }
+        } catch (err) {
+            console.error('Unable to copy to clipboard', err);
+        }
+        return
+    }
+
     navigator.clipboard.writeText(text).then(() => {
         $(event.target).attr('title', 'Copied!').tooltip('show');
         $(event.target).attr('data-original-title', 'Copied!').tooltip('show');
