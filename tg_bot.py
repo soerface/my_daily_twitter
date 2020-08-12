@@ -8,11 +8,12 @@ import tweepy
 import logging
 
 from telegram import BotCommand, Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler
+from telegram.ext import CommandHandler, CallbackContext, MessageHandler, Filters
 import pytz
 from pytz import timezone
 
-from common import TWEET_CHARACTER_LIMIT, redis, get_twitter_auth, get_twitter_api, MAX_QUEUE_SIZE
+from common import TWEET_CHARACTER_LIMIT, redis, get_twitter_auth, get_twitter_api, MAX_QUEUE_SIZE, telegram_updater, \
+    build_tweet_url
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.getLevelName(os.environ.get('LOG_LEVEL', 'INFO')))
@@ -85,7 +86,7 @@ def handle_test_tweet_command(update: Update, context: CallbackContext):
         context.bot.send_message(chat_id=update.message.chat_id,
                                  text='Sorry, I was unable to tweet something. Try /start')
         return
-    tweet_url = f'https://twitter.com/{status.author.name}/status/{status.id}'
+    tweet_url = build_tweet_url(status)
     context.bot.send_message(chat_id=update.message.chat_id, text=f'Here is your tweet: {tweet_url}')
 
 
@@ -115,8 +116,8 @@ def handle_authorize_command(update: Update, context: CallbackContext):
     redis.set(f'chat:{chat_id}:oauth:access_token_secret', access_token_secret)
     if not redis.get(f'chat:{chat_id}:settings:timezone'):
         redis.set(f'chat:{chat_id}:settings:timezone', 'UTC')
-    if not redis.get(f'chat:{chat_id}:settings:post_time'):
-        redis.set(f'chat:{chat_id}:settings:post_time', '12:00')
+    if not redis.get(f'chat:{chat_id}:settings:tweet_time'):
+        redis.set(f'chat:{chat_id}:settings:tweet_time', '12:00')
     context.bot.send_message(chat_id=chat_id,
                              text="You're all set! If you want to, you can test if "
                                   "everything works by posting a tweet: /test_tweet")
@@ -160,17 +161,20 @@ def handle_messages(update: Update, context: CallbackContext):
                              text=f'Ok, I will tweet that! You now have {queue_size} tweet(s) in your queue.')
 
 
-def handle_post_time_command(update: Update, context: CallbackContext):
+def handle_tweet_time_command(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
 
     if len(context.args) == 0:
         buttons = []
         for hour in range(24):
             for minute in range(0, 60, 15):
-                buttons.append([KeyboardButton(f'/post_time {hour:02}:{minute:02}')])
+                buttons.append([KeyboardButton(f'/tweet_time {hour:02}:{minute:02}')])
         reply = ReplyKeyboardMarkup(buttons, one_time_keyboard=True)
+        tweet_time = redis.get(f'chat:{chat_id}:settings:tweet_time')
+        if tweet_time:
+            tweet_time = tweet_time.decode()
         context.bot.send_message(chat_id=update.message.chat_id,
-                                 text='At which time should I tweet?',
+                                 text=f'Your current tweet time is {tweet_time}. Do you want to change it?',
                                  reply_markup=reply)
         return
 
@@ -179,9 +183,47 @@ def handle_post_time_command(update: Update, context: CallbackContext):
     except ValueError:
         context.bot.send_message(chat_id=chat_id, text="Sorry, I didn't get that time. Time must be in format %H:%M")
         return
-    redis.set(f'chat:{chat_id}:settings:post_time', tweet_time)
+    redis.set(f'chat:{chat_id}:settings:tweet_time', tweet_time)
     context.bot.send_message(chat_id=chat_id,
                              text=f'I will tweet at {tweet_time}')
+
+
+def handle_delete_last_command(update: Update, context: CallbackContext):
+    chat_id = update.message.chat_id
+    queue_size = redis.get(f'chat:{chat_id}:queue_size')
+    if queue_size is None:
+        queue_size = 0
+    queue_size = int(queue_size)
+    if queue_size <= 0:
+        context.bot.send_message(chat_id=chat_id, text='Queue is empty')
+        return
+    queue_size -= 1
+
+    tweet_text = redis.delete(f'chat:{chat_id}:queue:{queue_size}:text')
+    tg_attachment_id = redis.delete(f'chat:{chat_id}:queue:{queue_size}:tg_attachment_id')
+
+    redis.delete(f'chat:{chat_id}:queue:{queue_size}:text')
+    redis.delete(f'chat:{chat_id}:queue:{queue_size}:tg_attachment_id')
+
+    redis.set(f'chat:{chat_id}:queue_size', queue_size)
+
+    context.bot.send_message(chat_id=chat_id, text="I've deleted your latest tweet. This was the text:")
+    context.bot.send_message(chat_id=chat_id, text=tweet_text)
+    if tg_attachment_id:
+        context.bot.send_message(chat_id=chat_id, text='It also had an attachment')
+
+
+def handle_help_command(update: Update, context: CallbackContext):
+    context.bot.send_message(chat_id=update.message.chat_id,
+                             text='Send me messages and photos - I will put each message in a queue. '
+                                  'Every day, I post the first item of the queue on twitter.\n'
+                                  '\n'
+                                  '/start - connect me to twitter\n'
+                                  '/tweet_time - when do you want me to tweet?\n'
+                                  '/timezone - configure your timezone\n'
+                                  '\n'
+                                  'If you experience any issues, '
+                                  'let me know at https://github.com/soerface/my_daily_twitter/issues')
 
 
 def main():
@@ -195,24 +237,27 @@ def main():
         logging.error('You need to set the environment variable "TWITTER_CLIENT_SECRET"')
         return sys.exit(1)
 
-    updater = Updater(token=os.environ.get('TELEGRAM_TOKEN'), use_context=True)
-    updater.bot.set_my_commands([
+    telegram_updater.bot.set_my_commands([
         BotCommand('start', 'Starts the authorization process'),
-        # BotCommand('help', 'Display help'),
+        BotCommand('delete_last', 'Removes the last item from your queue. Does not delete already posted tweets.'),
+        BotCommand('help', 'Display help'),
         BotCommand('timezone', 'Changes the timezone of a chat'),
-        BotCommand('post_time', 'When do you want me to tweet?'),
+        BotCommand('tweet_time', 'When do you want me to tweet?'),
         BotCommand('test_tweet', 'Instantly sends a tweet to test authorization'),
         # BotCommand('clock', 'Outputs the date of the received message'),
     ])
-    updater.dispatcher.add_handler(CommandHandler('start', handle_start_command))
-    updater.dispatcher.add_handler(CommandHandler('timezone', handle_timezone_command))
-    updater.dispatcher.add_handler(CommandHandler('clock', handle_clock_command))
-    updater.dispatcher.add_handler(CommandHandler('post_time', handle_post_time_command))
-    updater.dispatcher.add_handler(CommandHandler('test_tweet', handle_test_tweet_command))
-    updater.dispatcher.add_handler(CommandHandler('authorize', handle_authorize_command))
-    updater.dispatcher.add_handler(MessageHandler(None, handle_messages))
+    telegram_updater.dispatcher.add_handler(CommandHandler('start', handle_start_command))
+    telegram_updater.dispatcher.add_handler(CommandHandler('delete_last', handle_delete_last_command))
+    telegram_updater.dispatcher.add_handler(CommandHandler('help', handle_help_command))
+    telegram_updater.dispatcher.add_handler(CommandHandler('timezone', handle_timezone_command))
+    telegram_updater.dispatcher.add_handler(CommandHandler('clock', handle_clock_command))
+    telegram_updater.dispatcher.add_handler(CommandHandler('tweet_time', handle_tweet_time_command))
+    telegram_updater.dispatcher.add_handler(CommandHandler('test_tweet', handle_test_tweet_command))
+    telegram_updater.dispatcher.add_handler(CommandHandler('authorize', handle_authorize_command))
+    telegram_updater.dispatcher.add_handler(MessageHandler(~Filters.command, handle_messages))
 
-    updater.start_polling()
+    logging.info('Ready, now polling telegram')
+    telegram_updater.start_polling()
 
 
 if __name__ == '__main__':
