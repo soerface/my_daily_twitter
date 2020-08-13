@@ -196,7 +196,7 @@ def handle_delete_last_command(update: Update, context: CallbackContext):
         return
     queue_size -= 1
 
-    tweet_text = redis.get(f'chat:{chat_id}:queue:{queue_size}:text')
+    tweet_text = redis.get(f'chat:{chat_id}:queue:{queue_size}:text') or ''
     tg_attachment_id = redis.get(f'chat:{chat_id}:queue:{queue_size}:tg_attachment_id')
 
     redis.delete(f'chat:{chat_id}:queue:{queue_size}:text')
