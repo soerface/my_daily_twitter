@@ -204,8 +204,7 @@ def handle_delete_last_command(update: Update, context: CallbackContext):
 
     redis.set(f'chat:{chat_id}:queue_size', queue_size)
 
-    context.bot.send_message(chat_id=chat_id, text="I've deleted your latest tweet. This was the text:")
-    context.bot.send_message(chat_id=chat_id, text=tweet_text)
+    context.bot.send_message(chat_id=chat_id, text="I've deleted your latest tweet. This was the text: " + tweet_text)
     if tg_attachment_id:
         context.bot.send_message(chat_id=chat_id, text='It also had an attachment')
 
