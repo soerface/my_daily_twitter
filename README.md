@@ -12,7 +12,7 @@ Running it with docker-compose is easy, set these environment variables or creat
     TWITTER_CLIENT_SECRET=yoursecret
     LOG_LEVEL=INFO
     
-Get the necessary information from https://developer.twitter.com/
+Get the necessary information for twitter from https://developer.twitter.com/ and register your telegram bot with [@BotFather](http://t.me/BotFather)
 
 Start everything:
 
