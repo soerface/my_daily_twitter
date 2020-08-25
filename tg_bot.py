@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 import os
 from datetime import datetime
+from typing import List
 
 import tweepy
 
 import logging
 
-from telegram import BotCommand, Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import CommandHandler, CallbackContext, MessageHandler, Filters
+from telegram import BotCommand, Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, ReplyKeyboardRemove
+from telegram.ext import CommandHandler, CallbackContext, MessageHandler, Filters, CallbackQueryHandler
 import pytz
 from pytz import timezone
 
@@ -18,36 +19,21 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     level=logging.getLevelName(os.environ.get('LOG_LEVEL', 'INFO')))
 
 
+def get_timezone_region_markup(continents):
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(x, callback_data=':'.join(['timezone', x])) for x in continents[i:i + 3]]
+         for i in range(0, len(continents), 3)]
+    )
+
+
 def handle_timezone_command(update: Update, context: CallbackContext):
     continents = sorted(set([x.partition('/')[0] for x in pytz.common_timezones]))
-    if len(context.args) == 0:
-        current_timezone = redis.get(f'chat:{update.message.chat_id}:settings:timezone')
-        reply = ReplyKeyboardMarkup(
-            [[KeyboardButton(f'/timezone {x}') for x in continents[i:i + 3]] for i in range(0, len(continents), 3)],
-            one_time_keyboard=True
-        )
-        context.bot.send_message(chat_id=update.message.chat_id,
-                                 text=f'Your current timezone is set to "{current_timezone}". '
-                                      'If you want to change it, choose your region',
-                                 reply_markup=reply)
-        return
-    location = context.args[0]
-    if location in pytz.all_timezones:
-        redis.set(f'chat:{update.message.chat_id}:settings:timezone', location)
-        tz = timezone(location)
-        local_time = update.message.date.astimezone(tz).strftime('%X')
-        context.bot.send_message(chat_id=update.message.chat_id,
-                                 text=f'Timezone of this chat was set to {location}. Looks like it is {local_time}. '
-                                      f'If this is incorrect, please execute /timezone again.')
-    elif location in continents:
-        zones = [x for x in pytz.all_timezones if x.startswith(location)]
-        reply = ReplyKeyboardMarkup(
-            [[KeyboardButton(f'/timezone {zone}')] for zone in zones],
-            one_time_keyboard=True
-        )
-        context.bot.send_message(chat_id=update.message.chat_id, text='Choose your timezone', reply_markup=reply)
-    else:
-        context.bot.send_message(chat_id=update.message.chat_id, text="Sorry, I've never heard of that timezone")
+    current_timezone = redis.get(f'chat:{update.message.chat_id}:settings:timezone')
+    reply = get_timezone_region_markup(continents)
+    context.bot.send_message(chat_id=update.message.chat_id,
+                             text=f'Your current timezone is set to "{current_timezone}". '
+                                  'If you want to change it, choose your region',
+                             reply_markup=reply)
 
 
 def handle_clock_command(update: Update, context: CallbackContext):
@@ -68,7 +54,8 @@ def handle_start_command(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
     context.bot.send_message(chat_id=chat_id,
                              text='I will tweet a message or photo from you each day. '
-                                  'Everything you send me will be added to a queue and tweeted later. ')
+                                  'Everything you send me will be added to a queue and tweeted later. ',
+                             reply_markup=ReplyKeyboardRemove())
     if update.message.chat.type != update.message.chat.GROUP:
         context.bot.send_message(chat_id=chat_id, text='You can also add me to groups!')
     context.bot.send_message(chat_id=chat_id,
@@ -163,26 +150,17 @@ def handle_messages(update: Update, context: CallbackContext):
 def handle_tweet_time_command(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
 
-    if len(context.args) == 0:
-        buttons = []
-        for hour in range(24):
-            buttons.append([KeyboardButton(f'/tweet_time {hour:02}:{minute:02}') for minute in range(0, 60, 15)])
-        reply = ReplyKeyboardMarkup(buttons, one_time_keyboard=True)
-        tweet_time = redis.get(f'chat:{chat_id}:settings:tweet_time')
-        context.bot.send_message(chat_id=update.message.chat_id,
-                                 text=f'Your current tweet time is {tweet_time}. Do you want to change it?',
-                                 reply_markup=reply)
-        return
-
-    try:
-        tweet_time = datetime.strptime(context.args[0], '%H:%M').strftime("%H:%M")
-    except ValueError:
-        context.bot.send_message(chat_id=chat_id, text="Sorry, I didn't understand that time. "
-                                                       "Time must be in format %H:%M")
-        return
-    redis.set(f'chat:{chat_id}:settings:tweet_time', tweet_time)
-    context.bot.send_message(chat_id=chat_id,
-                             text=f'I will tweet at {tweet_time}')
+    buttons = []
+    for hour in range(24):
+        buttons.append([InlineKeyboardButton(
+            f'{hour:02}:{minute:02}', callback_data=f'tweet_time:{hour}:{minute}'
+        ) for minute in range(0, 60, 15)])
+    buttons.append([InlineKeyboardButton('Cancel', callback_data=f'cancel')])
+    reply = InlineKeyboardMarkup(buttons, one_time_keyboard=True)
+    tweet_time = redis.get(f'chat:{chat_id}:settings:tweet_time')
+    context.bot.send_message(chat_id=update.message.chat_id,
+                             text=f'Your current tweet time is {tweet_time}. Do you want to change it?',
+                             reply_markup=reply)
 
 
 def handle_delete_last_command(update: Update, context: CallbackContext):
@@ -222,6 +200,60 @@ def handle_help_command(update: Update, context: CallbackContext):
                                   'let me know at https://github.com/soerface/my_daily_twitter/issues')
 
 
+def handle_inlinebutton_click(update: Update, context: CallbackContext):
+    query: CallbackQuery = update.callback_query
+    cmd, *args = query.data.split(':')
+
+    if cmd == 'timezone':
+        inlinebutton_timezone(update, context, query, args)
+    elif cmd == 'tweet_time':
+        inlinebutton_tweet_time(update, context, query, args)
+    elif cmd == 'cancel':
+        query.edit_message_text('Canceled')
+
+    query.answer()
+
+
+def inlinebutton_timezone(update: Update, context: CallbackContext, query: CallbackQuery, args: List[str]):
+    continents = sorted(set([x.partition('/')[0] for x in pytz.common_timezones]))
+    location = args[0]
+    if location == 'region_selection':
+        reply = get_timezone_region_markup(continents)
+        query.edit_message_text('Choose your region')
+        query.edit_message_reply_markup(reply)
+    elif location in pytz.all_timezones:
+        redis.set(f'chat:{query.message.chat_id}:settings:timezone', location)
+        tz = timezone(location)
+        local_time = query.message.date.astimezone(tz).strftime('%X')
+        reply = InlineKeyboardMarkup(
+            [[(InlineKeyboardButton('Change timezone', callback_data='timezone:region_selection'))]]
+        )
+        query.edit_message_text(
+            f'Timezone of this chat was set to {location}. '
+            f'Looks like it was {local_time} when you sent the last /timezone command. '
+            'If this is incorrect, please execute /timezone again or click the button below.'
+        )
+        query.edit_message_reply_markup(reply)
+    elif location in continents:
+        zones = [x for x in pytz.all_timezones if x.startswith(location)]
+        reply = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(x.partition('/')[2], callback_data=':'.join(['timezone', x]))] for x in zones]
+            + [[(InlineKeyboardButton('« Back', callback_data='timezone:region_selection'))]],
+        )
+        query.edit_message_text('Choose your timezone')
+        query.edit_message_reply_markup(reply)
+
+
+def inlinebutton_tweet_time(update: Update, context: CallbackContext, query: CallbackQuery, args: List[str]):
+    try:
+        tweet_time = datetime.strptime(':'.join(args), '%H:%M').strftime("%H:%M")
+    except ValueError:
+        query.edit_message_text("Sorry, I didn't understand that time. Time must be in format %H:%M")
+        return
+    redis.set(f'chat:{query.message.chat_id}:settings:tweet_time', tweet_time)
+    query.edit_message_text(f'I will tweet at {tweet_time}')
+
+
 def main():
     check_env_variables()
 
@@ -244,6 +276,7 @@ def main():
     telegram_updater.dispatcher.add_handler(CommandHandler('tweet_time', handle_tweet_time_command))
     telegram_updater.dispatcher.add_handler(CommandHandler('test_tweet', handle_test_tweet_command))
     telegram_updater.dispatcher.add_handler(CommandHandler('authorize', handle_authorize_command))
+    telegram_updater.dispatcher.add_handler(CallbackQueryHandler(handle_inlinebutton_click))
     telegram_updater.dispatcher.add_handler(
         MessageHandler((Filters.private | Filters.group) & (Filters.text | Filters.photo | Filters.document),
                        handle_messages))
