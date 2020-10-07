@@ -10,6 +10,7 @@ python-telegram-bot = "*"
 redis = "*"
 tweepy = "*"
 pytz = "*"
+sentry-sdk = "*"
 
 [requires]
 python_version = "3.8"

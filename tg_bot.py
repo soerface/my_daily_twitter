@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import sentry_sdk
 from datetime import datetime
 from typing import List
 
@@ -7,6 +8,8 @@ import tweepy
 
 import logging
 
+from sentry_sdk.integrations.redis import RedisIntegration
+from sentry_sdk.integrations.tornado import TornadoIntegration
 from telegram import BotCommand, Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, ReplyKeyboardRemove
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, Filters, CallbackQueryHandler
 import pytz
@@ -14,6 +17,12 @@ from pytz import timezone
 
 from common import TWEET_CHARACTER_LIMIT, redis, get_twitter_auth, get_twitter_api, MAX_QUEUE_SIZE, \
     get_telegram_updater, build_tweet_url, check_env_variables
+
+sentry_sdk.init(
+    os.environ.get('SENTRY_DSN'),
+    traces_sample_rate=1.0,
+    integrations=[RedisIntegration(), TornadoIntegration()],
+)
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.getLevelName(os.environ.get('LOG_LEVEL', 'INFO')))
