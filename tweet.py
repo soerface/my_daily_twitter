@@ -6,10 +6,19 @@ import threading
 from time import sleep
 from datetime import datetime
 
+import sentry_sdk
 import tweepy
 from pytz import timezone
+from sentry_sdk.integrations.redis import RedisIntegration
+from sentry_sdk.integrations.tornado import TornadoIntegration
 
 from common import redis, get_twitter_api, get_telegram_updater, FILE_STORAGE_PATH, build_tweet_url, check_env_variables
+
+sentry_sdk.init(
+    os.environ.get('SENTRY_DSN'),
+    traces_sample_rate=1.0,
+    integrations=[RedisIntegration(), TornadoIntegration()],
+)
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.getLevelName(os.environ.get('LOG_LEVEL', 'INFO')))
