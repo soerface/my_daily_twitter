@@ -111,11 +111,15 @@ def handle_authorize_command(update: Update, context: CallbackContext):
     redis.set(f'chat:{chat_id}:oauth:access_token_secret', access_token_secret)
     if not redis.get(f'chat:{chat_id}:settings:timezone'):
         redis.set(f'chat:{chat_id}:settings:timezone', 'UTC')
+    tz = redis.get(f'chat:{chat_id}:settings:timezone')
     if not redis.get(f'chat:{chat_id}:settings:tweet_time'):
         redis.set(f'chat:{chat_id}:settings:tweet_time', '12:00')
+    tweet_time = redis.get(f'chat:{chat_id}:settings:tweet_time')
     context.bot.send_message(chat_id=chat_id,
                              text="You're all set! If you want to, you can test if "
                                   "everything works by posting a tweet: /test_tweet")
+    context.bot.send_message(chat_id=chat_id,
+                             text=f'I will tweet at {tweet_time} ({tz}). You can change that: /tweet_time, /timezone')
 
 
 def find_largest_photo(photos):
@@ -152,8 +156,20 @@ def handle_messages(update: Update, context: CallbackContext):
                   find_largest_photo(update.message.photo).file_id)
     queue_size += 1
     redis.set(f'chat:{chat_id}:queue_size', queue_size)
+    tweet_time = redis.get(f'chat:{chat_id}:settings:tweet_time')
     context.bot.send_message(chat_id=chat_id,
-                             text=f'Ok, I will tweet that! You now have {queue_size} tweet(s) in your queue.')
+                             text=f'Ok, I will tweet that at {tweet_time}! You now have {queue_size} tweet(s) in your queue.')
+
+
+def handle_migrate_chat(update: Update, context: CallbackContext):
+    old_chat_id = update.message.migrate_from_chat_id
+    new_chat_id = update.message.chat_id
+    if old_chat_id is None or new_chat_id is None:
+        return
+    logging.info(f'Supergroup migration. Renaming redis keys chat:{old_chat_id}:* to chat:{new_chat_id}:*')
+    for key in redis.keys(f'chat:{old_chat_id}:*'):
+        new_key = key.replace(f'chat:{old_chat_id}:', f'chat:{new_chat_id}:')
+        redis.rename(key, new_key)
 
 
 def handle_tweet_time_command(update: Update, context: CallbackContext):
@@ -289,6 +305,7 @@ def main():
     telegram_updater.dispatcher.add_handler(
         MessageHandler((Filters.private | Filters.group) & (Filters.text | Filters.photo | Filters.document),
                        handle_messages))
+    telegram_updater.dispatcher.add_handler(MessageHandler(Filters.status_update.migrate, handle_migrate_chat))
 
     logging.info('Ready, now polling telegram')
     telegram_updater.start_polling()
